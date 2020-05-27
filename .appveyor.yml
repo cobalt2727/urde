@@ -6,8 +6,9 @@ clone_depth: 1
 platform:
   - x64
 
-build_cloud: axiodl-macOS
-image: macOS
+image:
+  - Windows
+  - macOS
 
 build:
   verbosity: detailed
@@ -15,26 +16,83 @@ build:
 configuration:
   - Release
 
-before_build:
-  - git submodule update --init --recursive
+allow_failures:
+  - image: macOS # not always available
 
-build_script:
-  - mkdir build
-  - cd build
-  - cmake -DCMAKE_BUILD_TYPE=$CONFIGURATION -GNinja ..
-  - ninja urde
+for:
+  - matrix:
+      only:
+        - image: Windows
 
-#notifications:
-#  - provider: Slack
-#    incoming_webhook:
-#      secure: uoO0I0PWyCx0KLjBOG6d17aSVuEEvYztB/UiF8J0LmTb2O735mAdWcuZHTImDFUGZxeI34/qzOB2JKqF+h8dZA5yiprSTkWIookqQjUokAM=
-#  - provider: Webhook
-#    url: https://skyhook.glitch.me/api/webhooks/345359672326356993/M8kBYpqr1JyVNhnAHBwNN5TnZmtWy9_msxAQoeOlaa73UhPn8gLU5uYZCjU1qsAi3sGN/appveyor
-#    method: POST
-#    on_build_success: true
-#    on_build_failure: true
-#    on_build_status_changed: false
+    build_cloud: axiodl
+    
+    cache:
+      - C:\projects\deps
 
-# Uncomment this to debug AppVeyor failures.
-#on_finish:
-#  - ps: $blockRdp = $true; iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
+    install:
+      ############################################################################
+      # All external dependencies are installed in C:\projects\deps
+      ############################################################################
+      - if not exist C:\projects\deps mkdir C:\projects\deps
+      - cd C:\projects\deps
+
+      ############################################################################
+      # Install Ninja
+      ############################################################################
+      - set NINJA_URL="https://github.com/ninja-build/ninja/releases/download/v1.10.0/ninja-win.zip"
+      - if not exist ninja.zip appveyor DownloadFile %NINJA_URL% -FileName ninja.zip
+      - if not exist ninja 7z x ninja.zip -oC:\projects\deps\ninja > nul
+
+      ############################################################################
+      # Install a recent CMake
+      ############################################################################
+      - set CMAKE_URL="https://github.com/Kitware/CMake/releases/download/v3.16.4/cmake-3.16.4-win64-x64.zip"
+      - if not exist cmake.zip appveyor DownloadFile %CMAKE_URL% -FileName cmake.zip
+      - if not exist cmake 7z x cmake.zip -oC:\projects\deps\cmake > nul
+
+      ############################################################################
+      # Install custom LLVM
+      ############################################################################
+      - set LLVM_URL="https://axiodl.com/files/LLVM-9.0.1-win64.exe"
+      - if not exist llvm.exe appveyor DownloadFile %LLVM_URL% -FileName llvm.exe
+      - if not exist llvm llvm.exe /S /D=C:\projects\deps\llvm
+
+    before_build:
+      # Configure ninja
+      - set PATH=C:\projects\deps\ninja;%PATH%
+      - ninja --version
+      # Configure cmake
+      - set PATH=C:\projects\deps\cmake\cmake-3.16.4-win64-x64\bin;%PATH%
+      - cmake --version
+      # Configure LLVM
+      - set PATH=C:\projects\deps\llvm\bin;%PATH%
+      - llvm-config --version
+      - clang-cl -v
+      - set CC=clang-cl -mrtm
+      - set CXX=clang-cl -mrtm
+      # Configure VS
+      - call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" amd64
+      # Fetch submodules
+      - cd %APPVEYOR_BUILD_FOLDER%
+      - git submodule update --init --recursive
+
+    build_script:
+      - mkdir build
+      - cd build
+      - cmake -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DLLVM_ROOT_DIR=C:\projects\deps\llvm -GNinja ..
+      - ninja urde
+
+  - matrix:
+      only:
+        - image: macOS
+
+    build_cloud: axiodl-macOS
+
+    before_build:
+      - git submodule update --init --recursive
+
+    build_script:
+      - mkdir build
+      - cd build
+      - cmake -DCMAKE_BUILD_TYPE=$CONFIGURATION -GNinja ..
+      - ninja urde
