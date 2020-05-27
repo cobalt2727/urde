@@ -16,8 +16,9 @@ build:
 configuration:
   - Release
 
-allow_failures:
-  - image: macOS # not always available
+matrix:
+  allow_failures:
+    - image: macOS # not always available
 
 for:
   - matrix:
